@@ -15,10 +15,18 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
+# fructu@gmail.com: this file is a branch of the version 0.4 with a new
+# feature:
+#   - multi line suport, now in a node you can have different messages in a URL
+#   label for each line and when you click in one of those lines you will
+#   obtain the associate part of the URL, see example_01.py and example_01.dot.
+#
 
-'''Visualize dot graphs via the xdot format.'''
+'''Visualize dot graphs via the xdot format. multi line branch'''
 
-__author__ = "Jose Fonseca et al"
+__author__ = "Jose Fonseca"
+
+__version__ = "0.5.multi_line_4"
 
 
 import os
@@ -37,7 +45,7 @@ import gtk.keysyms
 import cairo
 import pango
 import pangocairo
-
+import math
 
 # See http://www.graphviz.org/pub/scm/graphviz-cairo/plugin/cairo/gvrender_cairo.c
 
@@ -45,6 +53,24 @@ import pangocairo
 # - http://mirageiv.berlios.de/
 # - http://comix.sourceforge.net/
 
+class Options:
+    def __init__(self):
+      self.multi_line_activate = 0
+      self.line_separator = ';'
+
+    def set_multi_line_activate(self, multi_line_activate):
+      self.multi_line_activate = multi_line_activate
+
+    def get_multi_line_activate(self):
+      return self.multi_line_activate
+
+    def set_multi_line_separator(self, separator):
+      self.line_separator = separator
+
+    def get_multi_line_separator(self):
+      return self.line_separator
+
+options = Options()
 
 class Pen:
     """Store pen attributes."""
@@ -392,9 +418,55 @@ class Node(Element):
     def is_inside(self, x, y):
         return self.x1 <= x and x <= self.x2 and self.y1 <= y and y <= self.y2
 
-    def get_url(self, x, y):
+    #
+    # multi_line feature fructu@gmail.com
+    # 
+    # y2_inside the top of the node is 0
+    #           and the bottom is the height
+    #
+    # y is global, i want the position with the top of node
+    #
+    def get_item_url(self, x, y):
+        item_selected = ""
+        if ( self.y1 >= 0 ):
+          y_inside = y - self.y1
+        else:
+          y_inside = y + self.y1
+
+        url=Url(self, self.url)
+
+        l_class_parts = url.url.split(options.get_multi_line_separator())
+
+        n_parts = len(l_class_parts)
+
+        element_height = (self.y2 - self.y1) / n_parts
+        y_inside_centered = y_inside
+
+        n_element = int( math.ceil( y_inside_centered / element_height ) ) - 1
+
+        if( 0 <= n_element and n_element <= n_parts):
+          url.url = l_class_parts[n_element]
+
+        return url
+
+
+    def get_url_multi_line(self, x, y):
+        if not self.is_inside(x, y):
+          return None
+
         if self.url is None:
             return None
+
+        url = self.get_item_url(x,y)
+
+        if self.is_inside(x, y):
+            return url
+        return None
+
+    def get_url(self, x, y):    
+        if self.url is None:
+            return None
+        #print (x, y), (self.x1, self.y1), "-", (self.x2, self.y2)
         if self.is_inside(x, y):
             return Url(self, self.url)
         return None
@@ -487,7 +559,11 @@ class Graph(Shape):
 
     def get_url(self, x, y):
         for node in self.nodes:
-            url = node.get_url(x, y)
+            if options.get_multi_line_activate() == 1:
+              url = node.get_url_multi_line(x, y)            
+            else:
+              url = node.get_url(x, y)
+
             if url is not None:
                 return url
         return None
@@ -1875,10 +1951,11 @@ class DotWindow(gtk.Window):
 
     base_title = 'Dot Viewer'
 
-    def __init__(self, widget=None):
+    def __init__(self, multi_line = 0, widget=None):
         gtk.Window.__init__(self)
 
         self.graph = Graph()
+        options.set_multi_line_activate(multi_line) 
 
         window = self
 
